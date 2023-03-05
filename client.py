@@ -8,13 +8,12 @@ import pickle
 from enum import Enum
 from dotenv import load_dotenv
 import rsa
-from utils import MessageTypes
+from utils import MessageTypes, HEADER_LENGTH
 import utils
-load_dotenv()
+from utils import enc, dec
+import time
 
-import os
-
-HEADER_LENGTH = int(os.environ.get("HEADER_LENGTH"))
+KEY_LENGTH = 2048
 
 IP = "127.0.0.1"
 PORT = 1234
@@ -22,44 +21,55 @@ PORT = 1234
 
 class Client:
     def __init__(self) -> None:
+
+      self.str_to_obj_keys = {}
+
       f = open("./keys/public.txt", "r")
-
       self.server_public_key = rsa.PublicKey.load_pkcs1(f.read().encode('utf8'))
+      f.close()
 
-      self.public_key, self.private_key = rsa.newkeys(2048)
+     
+      self.public_key, self.private_key = rsa.newkeys(KEY_LENGTH)
       self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
       self.socket.connect((IP, PORT))
+      print(self.socket)
       self.socket.setblocking(False)
+      
+      self.str_public_key = dec(self.public_key.save_pkcs1('PEM'))
+      print('self')
+      print(self.str_public_key)
 
-      msg = tkinter.Tk()
-      msg.withdraw()
+      self.prompt_username()
 
-      self.username = simpledialog.askstring("Username", "Enter your username", parent=msg)
-
-      self.gui_done = False
-      self.running = True
-
-      username = self.username.encode('utf-8')
-      username_header = f"{len(username):<{HEADER_LENGTH}}".encode('utf-8')
+      public_key_object = {'type': MessageTypes.ADD_PUBLIC_KEY, 'key': self.str_public_key}
+      
+      utils.send_object_to_socket(public_key_object, self.socket, self.server_public_key)
+      self.start_threads()
       #self.socket.send(username_header + username)
-      self.send_encrypted_message(username_header + username)
+      #self.send_encrypted_message(public_key_message)
+      # print(encrypted_public_key)
 
-      tk_thread = threading.Thread(target=self.gui_loop)
-      receiver_thread = threading.Thread(target=self.receive_messages)
+      
 
-      tk_thread.start()
-      receiver_thread.start()
 
-    def encrypt_and_send(self, message_type, message):
-       plain_message = {message_type: message_type, message: message}
-       pickled_message = pickle.dumps(plain_message)
-       encrypted_message = utils.encrypt(self.server_public_key, pickled_message)
-       message_len = len(encrypted_message)
-       byte_header = bytes(f"{message_len:<{HEADER_LENGTH}}".encode('utf-8'))
-       complete_message = byte_header + encrypted_message
-       self.socket.send(complete_message)
+    def send_to_all(self, message):
+       print('in send_to_all')
+       print('current public keys')
+       print(self.str_to_obj_keys)
+       peer_message = {'type': MessageTypes.CHAT_MESSAGE,'username': self.username, 'message': message}
+       pickled_message = pickle.dumps(peer_message)
 
-    
+       for str_key, object_key in self.str_to_obj_keys.items():
+          message_body = utils.encrypt(object_key, pickled_message)
+          destination_message = utils.wrap_body(message_body)
+          self.encrypt_and_send_forward_server(str_key, destination_message)
+
+    def encrypt_and_send_forward_server(self, destination_key, destination_encr_message):
+       server_message = {'type': MessageTypes.CHAT_MESSAGE, 'public-key': destination_key, 'byte-length': len(destination_encr_message) }
+       server_msg_bytes = pickle.dumps(server_message)
+       encrypted_server_msg = utils.encrypt(self.server_public_key,server_msg_bytes)
+       wrapped_server_msg = utils.wrap_body(encrypted_server_msg)
+       self.socket.send(wrapped_server_msg + destination_encr_message)
        
     def send_encrypted_message(self, encoded_msg):
        
@@ -99,42 +109,83 @@ class Client:
 
       self.win.mainloop()
 
+    def prompt_username(self):
+        msg = tkinter.Tk()
+        msg.withdraw()
+        self.username = simpledialog.askstring("Username", "Enter your username", parent=msg)
+        self.gui_done = False
+        self.running = True
+
     def send_message(self):
       message = f'{self.input_area.get("1.0", "end")}'
-      message = message.encode('utf-8')
-      message_header = f"{len(message):<{HEADER_LENGTH}}".encode('utf-8')
-
-      self.send_encrypted_message(message_header + message)
+      self.send_to_all(message)
       self.input_area.delete('1.0', 'end')
+
+      # below old
+      
+      
+      ## CHANGE THIS!
+      #encrypted_message = utils.encrypt(self.server_public_key, encoded_message)
+      #self.send_encrypted_message(utils.wrap_body(encrypted_message))
+      
     
     def generate_encrypted_message(self, headers, message_body):
-       
        pass
+    
+    def append_message(self, username, message):
+      self.text_area.config(state="normal")
+      self.text_area.insert('end', f'{username} > {message}')
+
+      self.text_area.config(state="disable")
     
     def receive_messages(self):
       while self.running:
         try:
-            username_header = self.socket.recv(HEADER_LENGTH)
+            header = self.socket.recv(HEADER_LENGTH)
+            print('header')
+            print(header)
             # If we received no data, server gracefully closed a connection, for example using socket.close() or socket.shutdown(socket.SHUT_RDWR)
-            if not len(username_header):
+            if not len(header):
                 print('Connection closed by the server')
                 self.stop()
             elif self.gui_done:
               # Convert header to int value
-              username_length = int(username_header.decode('utf-8').strip())
+              encrypted_length = int(header.decode('utf-8').strip())
 
-              # Receive and decode username
-              username = self.socket.recv(username_length).decode('utf-8')
+              
 
-              # Now do the same for message (as we received username, we received whole message, there's no need to check if it has any length)
-              message_header = self.socket.recv(HEADER_LENGTH)
-              message_length = int(message_header.decode('utf-8').strip())
-              message = self.socket.recv(message_length).decode('utf-8')
+              encrypted_message = self.socket.recv(encrypted_length)
 
-              self.text_area.config(state="normal")
-              self.text_area.insert('end', f'{username} > {message}')
+              print(encrypted_message)
 
-              self.text_area.config(state="disable")
+              pickled_message = utils.decrypt(self.private_key, encrypted_message)
+
+              print(pickled_message)
+
+              message_object = pickle.loads(pickled_message)
+
+              message_type = message_object['type']
+
+              #print(message_type)
+
+              print(message_object)
+
+              if message_type == MessageTypes.ACTIVE_PUBLIC_KEYS:
+                for key in message_object['keys']:
+                   pass
+                  #self.peer_pem_to_byte_keys.add(key)
+              elif message_type == MessageTypes.ADD_PUBLIC_KEY:
+                print(message_object)
+                key_pem = message_object['key']
+                key_object = rsa.PublicKey.load_pkcs1(enc(key_pem))
+                self.str_to_obj_keys[key_pem] = key_object
+                print('saved!')
+                print(key_pem)
+              elif message_type == MessageTypes.REMOVE_PUBLIC_KEY:
+                 key = message_object['key']
+                 del self.str_to_obj_keys[key]
+              elif message_type == MessageTypes.CHAT_MESSAGE:
+                 self.append_message(message_object['username'], message_object['message'])
 
 
         except IOError as e:
@@ -143,7 +194,7 @@ class Client:
         # We are going to check for both - if one of them - that's expected, means no incoming data, continue as normal
         # If we got different error code - something happened
             if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
-                print('Reading error: {}'.format(str(e)))
+                print('Reading error1: {}'.format(str(e)))
                 self.stop()
 
             # We just did not receive anything
@@ -151,8 +202,15 @@ class Client:
 
         except Exception as e:
             # Any other exception - something happened, exit
-            print('Reading error: '.format(str(e)))
+            print('Reading error2: '.format(str(e)))
             self.stop()
+    
+    def start_threads(self):
+      tk_thread = threading.Thread(target=self.gui_loop)
+      receiver_thread = threading.Thread(target=self.receive_messages)
+
+      tk_thread.start()
+      receiver_thread.start()
 
     def stop(self):
         self.running = False
