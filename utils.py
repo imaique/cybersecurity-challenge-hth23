@@ -18,20 +18,28 @@ class MessageTypes(Enum):
     REMOVE_PUBLIC_KEY = 7
 
 def encrypt(public_key, byte_data):
-    result = []
-    for n in range(0,len(byte_data),245):
-        part = byte_data[n:n+245]
-        result.append( rsa.encrypt(part, public_key) )
-    print(len(result),len(result[0]))
-    return b''.join(result)
+    try:
+        result = []
+        for n in range(0,len(byte_data),245):
+            part = byte_data[n:n+245]
+            result.append( rsa.encrypt(part, public_key) )
+        print(len(result),len(result[0]))
+        return b''.join(result)
+    except:
+        print('failed encryption')
+        return None
 
 def decrypt(private_key, encrypted_data):
-    result = []
-    for n in range(0,len(encrypted_data),256):
-        part = encrypted_data[n:n+256]
-        result.append(rsa.decrypt(part, private_key))
-    result = b''.join(result)
-    return result
+    try:
+        result = []
+        for n in range(0,len(encrypted_data),256):
+            part = encrypted_data[n:n+256]
+            result.append(rsa.decrypt(part, private_key))
+        result = b''.join(result)
+        return result
+    except:
+        print('failed decryption')
+        return None
 
 def wrap_body(message_body):
     message_len = len(message_body)

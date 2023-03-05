@@ -61,8 +61,7 @@ class Client:
 
        for str_key, object_key in self.str_to_obj_keys.items():
           message_body = utils.encrypt(object_key, pickled_message)
-          destination_message = utils.wrap_body(message_body)
-          self.encrypt_and_send_forward_server(str_key, destination_message)
+          self.encrypt_and_send_forward_server(str_key, message_body)
 
     def encrypt_and_send_forward_server(self, destination_key, destination_encr_message):
        server_message = {'type': MessageTypes.CHAT_MESSAGE, 'public-key': destination_key, 'byte-length': len(destination_encr_message) }
@@ -180,7 +179,7 @@ class Client:
                 key_object = rsa.PublicKey.load_pkcs1(enc(key_pem))
                 self.str_to_obj_keys[key_pem] = key_object
                 print('saved!')
-                print(key_pem)
+                print(self.str_to_obj_keys)
               elif message_type == MessageTypes.REMOVE_PUBLIC_KEY:
                  key = message_object['key']
                  del self.str_to_obj_keys[key]

@@ -30,6 +30,7 @@ server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 # For a server using 0.0.0.0 means to listen on all available interfaces, useful to connect locally to 127.0.0.1 and remotely to LAN interface IP
 server_socket.bind((IP, PORT))
 
+
 # This makes server listen to new connections
 server_socket.listen()
 
@@ -193,7 +194,8 @@ while True:
                 dest_key = message_object['public-key']
                 bytes_remaining = int(message_object['byte-length'])
                 encrypted_data = client_socket.recv(bytes_remaining)
-                pem_key_to_socket[dest_key].send(encrypted_data)
+                wrapped = utils.wrap_body(encrypted_data)
+                pem_key_to_socket[dest_key].send(wrapped)
 
 
             # Old
