@@ -6,6 +6,8 @@ __pycache__/
 # C extensions
 *.so
 
+keys/private.txt
+
 node_modules
 
 # Distribution / packaging
