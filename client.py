@@ -39,7 +39,6 @@ class Client:
       self.gui_done = False
       self.running = True
 
-      self.encrypt(MessageTypes.USERNAME, username)
       username = self.username.encode('utf-8')
       username_header = f"{len(username):<{HEADER_LENGTH}}".encode('utf-8')
       #self.socket.send(username_header + username)
